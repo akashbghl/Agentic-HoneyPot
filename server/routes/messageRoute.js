@@ -6,9 +6,6 @@ import { detectScam } from "../services/scamDetector.js";
 import { getAgentReply } from "../services/agentService.js";
 import { extractIntel } from "../services/intelligenceExtractor.js";
 
-// IMPORTANT: do NOT use memoryStore here for hackathon
-// They send history themselves
-
 router.post("/message", checkApiKey, async (req, res) => {
   try {
     const {
@@ -28,11 +25,12 @@ router.post("/message", checkApiKey, async (req, res) => {
     }
 
     // 3️⃣ Combine everything for intel extraction
-    const combinedText = `
-${history.map(h => h.message || "").join("\n")}
-${message}
-${agentReply}
-`;
+const combinedText = [
+  ...history.map(h => h.message || ""),
+  message,
+  agentReply
+].join("\n");
+
 
     const intel = extractIntel(combinedText);
 

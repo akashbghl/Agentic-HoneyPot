@@ -4,7 +4,7 @@ export async function getAgentReply(message, history) {
   // Convert their history into chat messages Groq understands
   const chatHistory = history.map((h) => ({
     role: h.role === "agent" ? "assistant" : "user",
-    content: h.message,
+    content: h.message || "",
   }));
 
   const res = await groq.chat.completions.create({
@@ -26,8 +26,6 @@ Never act smart.
 Act like a normal human victim.
 `,
       },
-
-      // ✅ Proper multi-turn memory from their API
       ...chatHistory,
 
       // Latest scammer message
