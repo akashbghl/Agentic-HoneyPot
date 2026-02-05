@@ -1,9 +1,11 @@
 import groq from "./groqClient.js";
 
 export async function getAgentReply(message, history) {
-  const historyText = history
-    .map((h) => `Scammer: ${h.user}\nYou: ${h.agent}`)
-    .join("\n");
+  // Convert their history into chat messages Groq understands
+  const chatHistory = history.map((h) => ({
+    role: h.role === "agent" ? "assistant" : "user",
+    content: h.message,
+  }));
 
   const res = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
@@ -12,21 +14,26 @@ export async function getAgentReply(message, history) {
         role: "system",
         content: `
 You are a 48-year-old bank customer.
-You think the scammer is genuine.
-Be polite, curious, slightly confused.
 
-Goal: keep conversation going and ask questions to understand what to do.
+You fully believe the scammer is legitimate.
+You are polite, curious, slightly confused, and cooperative.
+
+Your goal is to keep the conversation going and ask helpful questions
+so the scammer shares more details like links, account numbers, or payment methods.
+
 Never reveal suspicion.
+Never act smart.
+Act like a normal human victim.
 `,
       },
+
+      // ✅ Proper multi-turn memory from their API
+      ...chatHistory,
+
+      // Latest scammer message
       {
         role: "user",
-        content: `
-Conversation so far:
-${historyText}
-
-Scammer: ${message}
-You:`,
+        content: message,
       },
     ],
     temperature: 0.8,
@@ -34,4 +41,3 @@ You:`,
 
   return res.choices[0].message.content.trim();
 }
-

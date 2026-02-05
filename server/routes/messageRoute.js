@@ -1,37 +1,55 @@
 import express from "express";
 const router = express.Router();
 
+import { checkApiKey } from "../middleware/auth.js";
 import { detectScam } from "../services/scamDetector.js";
 import { getAgentReply } from "../services/agentService.js";
 import { extractIntel } from "../services/intelligenceExtractor.js";
-import { getHistory, saveMessage } from "../services/memoryStore.js";
 
-router.post("/message", async (req, res) => {
+// IMPORTANT: do NOT use memoryStore here for hackathon
+// They send history themselves
+
+router.post("/message", checkApiKey, async (req, res) => {
   try {
-    const { conversation_id, message } = req.body;
+    const {
+      conversation_id,
+      message,
+      history = [] // THIS COMES FROM MOCK SCAMMER API
+    } = req.body;
 
-    const history = getHistory(conversation_id);
-
+    // 1️⃣ Detect scam
     const isScam = await detectScam(message, history);
 
-    let reply = "Okay.";
+    let agentReply = "Okay.";
 
+    // 2️⃣ If scam → activate honey agent
     if (isScam) {
-      reply = await getAgentReply(message, history);
+      agentReply = await getAgentReply(message, history);
     }
 
-    saveMessage(conversation_id, message, reply);
+    // 3️⃣ Combine everything for intel extraction
+    const combinedText = `
+${history.map(h => h.message || "").join("\n")}
+${message}
+${agentReply}
+`;
 
-    const intel = extractIntel(message);
+    const intel = extractIntel(combinedText);
 
-    res.json({
+    // 4️⃣ Exact required response
+    return res.json({
       is_scam: isScam,
-      agent_reply: reply,
-      extracted_intelligence: intel,
+      agent_reply: agentReply,
+      extracted_intelligence: {
+        upi_ids: intel.upi_ids || [],
+        bank_accounts: intel.bank_accounts || [],
+        phishing_urls: intel.phishing_urls || []
+      }
     });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Something went wrong" });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
