@@ -1,18 +1,19 @@
 import groq from "./groqClient.js";
 
 export async function getAgentReply(message, history) {
-  // Converting history into chat messages, so Groq understands
-  const chatHistory = history.map((h) => ({
-    role: h.role === "agent" ? "assistant" : "user",
-    content: h.message || "",
-  }));
+    // Converting history into chat messages, so Groq understands
+    const chatHistory = history.map(h => ({
+        role: h.sender === "user" ? "assistant" : "user",
+        content: h.text || ""
+    }));
 
-  const res = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [
-      {
-        role: "system",
-        content: `
+
+    const res = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+            {
+                role: "system",
+                content: `
 You are a 48-year-old bank customer.
 
 You fully believe the scammer is legitimate.
@@ -25,17 +26,17 @@ Never reveal suspicion.
 Never act smart.
 Act like a normal human victim.
 `,
-      },
-      ...chatHistory,
+            },
+            ...chatHistory,
 
-      // Latest scammer message
-      {
-        role: "user",
-        content: message,
-      },
-    ],
-    temperature: 0.8,
-  });
+            // Latest scammer message
+            {
+                role: "user",
+                content: message,
+            },
+        ],
+        temperature: 0.8,
+    });
 
-  return res.choices[0].message.content.trim();
+    return res.choices[0].message.content.trim();
 }

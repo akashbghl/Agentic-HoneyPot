@@ -5,49 +5,72 @@ import { checkApiKey } from "../middleware/auth.js";
 import { detectScam } from "../services/scamDetector.js";
 import { getAgentReply } from "../services/agentService.js";
 import { extractIntel } from "../services/intelligenceExtractor.js";
+import { getSession, addMessage } from "../services/sessionStore.js";
+import { sendFinalResult } from "../services/guviCallback.js";
 
 router.post("/message", checkApiKey, async (req, res) => {
-    try {
-        const {
-            conversation_id,
-            message,
-            history = [] // Comes from mock scammer api
-        } = req.body;
+  try {
+    const { message, conversationHistory = [], sessionId } = req.body;
 
-        // Detect scam
-        const isScam = await detectScam(message, history);
+    const text = String(message?.text || "");
+    const session = getSession(sessionId);
 
-        let agentReply = "Okay.";
+    // Track scammer message
+    addMessage(sessionId, "scammer", text);
 
-        // If scam → activate honey agent
-        if (isScam) {
-            agentReply = await getAgentReply(message, history);
-        }
+    const isScam = await detectScam(text);
+    if (isScam) session.scamDetected = true;
 
-        // Combine everything for intel extraction
-        const combinedText = [
-            ...history.map(h => h.message || ""),
-            message,
-            agentReply
-        ].join("\n");
+    let reply = "Okay.";
 
-
-        const intel = extractIntel(combinedText);
-
-        return res.json({
-            is_scam: isScam,
-            agent_reply: agentReply,
-            extracted_intelligence: {
-                upi_ids: intel.upi_ids || [],
-                bank_accounts: intel.bank_accounts || [],
-                phishing_urls: intel.phishing_urls || []
-            }
-        });
-
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: "Internal Server Error" });
+    if (isScam) {
+      reply = await getAgentReply(text, conversationHistory);
     }
+
+    // Track agent reply
+    addMessage(sessionId, "agent", reply);
+
+    // ✅ Trigger GUVI callback after enough engagement
+    if (
+      session.scamDetected &&
+      session.messages.length >= 8 &&
+      !session.callbackSent
+    ) {
+      const fullText = session.messages.map(m => m.text).join("\n");
+      const intel = extractIntel(fullText);
+
+      await sendFinalResult({
+        sessionId,
+        scamDetected: true,
+        totalMessagesExchanged: session.messages.length,
+        extractedIntelligence: {
+          bankAccounts: intel.bank_accounts,
+          upiIds: intel.upi_ids,
+          phishingLinks: intel.phishing_urls,
+          phoneNumbers: intel.phone_numbers,
+          suspiciousKeywords: intel.suspicious_keywords,
+        },
+        agentNotes:
+          "Scammer used urgency, fear tactics, and payment redirection.",
+      });
+
+      session.callbackSent = true;
+      console.log("✅ GUVI callback sent for session:", sessionId);
+    }
+
+    // ✅ Required tester response
+    return res.json({
+      status: "success",
+      reply: reply,
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: "error",
+      message: "Internal error",
+    });
+  }
 });
 
 export default router;
