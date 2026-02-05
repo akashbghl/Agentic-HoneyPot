@@ -1,7 +1,7 @@
 import groq from "./groqClient.js";
 
 export async function getAgentReply(message, history) {
-  // Convert their history into chat messages Groq understands
+  // Converting history into chat messages, so Groq understands
   const chatHistory = history.map((h) => ({
     role: h.role === "agent" ? "assistant" : "user",
     content: h.message || "",
