@@ -1,0 +1,13 @@
+node_modules
+.env
+.env*
+.env.local
+dist
+npm-debug.log
+.DS_Store
+.vscode
+coverage
+logs
+*.log
+pids
+*.pid
