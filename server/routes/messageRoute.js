@@ -31,6 +31,11 @@ router.post("/message", checkApiKey, async (req, res) => {
     addMessage(sessionId, "agent", reply);
 
     // ✅ Trigger GUVI callback after enough engagement
+    console.log("Session State:", {
+      scamDetected: session.scamDetected,
+      messageCount: session.messages.length,
+      callbackSent: session.callbackSent
+    });
     if (
       session.scamDetected &&
       session.messages.length >= 8 &&

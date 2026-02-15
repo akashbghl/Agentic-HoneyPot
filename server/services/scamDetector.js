@@ -5,7 +5,7 @@ export async function detectScam(message) {
 
   const res = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
-    messages: [
+    messages: [ 
       {
         role: "system",
         content: "Reply only YES or NO. Is this message a scam attempt?",
