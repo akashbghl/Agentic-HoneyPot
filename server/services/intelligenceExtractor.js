@@ -13,8 +13,8 @@ export function extractIntel(text = "") {
   // Indian phone numbers (+91 or 10-digit)
   const phoneRegex = /(\+91[\s-]?\d{10}|\b\d{10}\b)/g;
 
-  // Bank account (9–18 digits but exclude phone numbers)
-  const bankRegex = /\b\d{9,18}\b/g;
+  // Bank account (11–18 digits but exclude phone numbers)
+  const bankRegex = /\b\d{11,18}\b/g;
 
   const keywordsList = [
     "urgent",
@@ -44,10 +44,18 @@ export function extractIntel(text = "") {
 
   const phoneNumbers = [...new Set(t.match(phoneRegex) || [])];
 
+  const rawBankMatches = t.match(bankRegex) || [];
+
   const bankAccounts = [...new Set(
-    (t.match(bankRegex) || []).filter(
-      (num) => !phoneNumbers.includes(num) // avoid duplicating phone as bank
-    )
+    rawBankMatches.filter(num => {
+      // Exclude 10-digit numbers (likely phone numbers)
+      if (num.length === 10) return false;
+
+      // Exclude numbers that appear inside phone numbers
+      if (phoneNumbers.some(phone => phone.includes(num))) return false;
+
+      return true;
+    })
   )];
 
   const emailMatches = t.match(emailRegex);

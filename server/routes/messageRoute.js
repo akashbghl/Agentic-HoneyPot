@@ -15,14 +15,15 @@ router.post("/message", checkApiKey, async (req, res) => {
     if (!sessionId) {
       return res.json({
         status: "error",
-        reply: "Session ID is required."
+        reply: "Session ID is required.",
+        finalOutput: null
       });
     }
 
     const text = String(message?.text || "").trim();
     const session = getSession(sessionId);
 
-    // Initialize start time if first message
+    // Initialize start time
     if (!session.startTime) {
       session.startTime = Date.now();
     }
@@ -30,31 +31,42 @@ router.post("/message", checkApiKey, async (req, res) => {
     // Track scammer message
     addMessage(sessionId, "scammer", text);
 
-    // Detect scam
-    const isScam = await detectScam(text);
-    if (isScam) session.scamDetected = true;
+    // SMART DETECTION OPTIMIZATION
 
+    const obviousScamPattern =
+      /otp|transfer|blocked|suspend|urgent|verify|reward|cashback|lottery|click|upi|account/i;
+
+    // Only call LLM if scam not already detected
+    if (!session.scamDetected) {
+      if (obviousScamPattern.test(text)) {
+        session.scamDetected = true;
+      } else {
+        const isScam = await detectScam(text);
+        if (isScam) session.scamDetected = true;
+      }
+    }
+
+    // agent reply
     let reply = "Okay.";
 
-    if (isScam) {
+    if (session.scamDetected) {
       reply = await getAgentReply(text, conversationHistory);
     }
 
-    // Track agent reply
     addMessage(sessionId, "agent", reply);
 
-    // Calculate engagement metrics
+    // ENGAGEMENT METRICS
+
     const engagementDurationSeconds = Math.floor(
       (Date.now() - session.startTime) / 1000
     );
 
-    // Extract intelligence continuously
+    // Extract intelligence from full session
     const fullText = session.messages.map(m => m.text).join("\n");
     const intel = extractIntel(fullText);
 
-    // Build final output structure
     const finalOutput = {
-      status: session.scamDetected ? "completed" : "in_progress",
+      status: session.callbackSent ? "completed" : "in_progress",
       scamDetected: session.scamDetected,
       totalMessagesExchanged: session.messages.length,
       extractedIntelligence: {
@@ -62,33 +74,32 @@ router.post("/message", checkApiKey, async (req, res) => {
         upiIds: intel.upi_ids || [],
         phishingLinks: intel.phishing_urls || [],
         phoneNumbers: intel.phone_numbers || [],
-        emailAddresses: intel.email_addresses || [],
+        emailAddresses: intel.email_addresses || []
       },
       engagementMetrics: {
         totalMessagesExchanged: session.messages.length,
         engagementDurationSeconds
       },
       agentNotes: session.scamDetected
-        ? "Impersonation or financial redirection behavior detected."
+        ? "Suspicious financial or impersonation behavior detected."
         : "No confirmed scam behavior yet."
     };
 
-    // Trigger callback once threshold reached
+    //CALLBACK TO GUVI WITH FINAL RESULT
     if (
       session.scamDetected &&
       session.messages.length >= 8 &&
       !session.callbackSent
     ) {
-      await sendFinalResult({
+      sendFinalResult({
         sessionId,
         ...finalOutput
-      });
+      }).catch(console.error);
 
       session.callbackSent = true;
-      console.log("✅ GUVI callback sent for session:", sessionId);
+      console.log("✅ GUVI callback sent:", sessionId);
     }
 
-    // Always return 200
     return res.json({
       status: "success",
       reply,
@@ -98,7 +109,6 @@ router.post("/message", checkApiKey, async (req, res) => {
   } catch (err) {
     console.error(err);
 
-    // Always return 200 to avoid evaluation penalty
     return res.json({
       status: "error",
       reply: "System encountered an issue.",
