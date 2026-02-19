@@ -1,9 +1,8 @@
 import groq from "./groqClient.js";
 
 export async function detectScam(message) {
+  const safeMessage = String(message || "").slice(0, 2000); // safety limit
   try {
-    const safeMessage = String(message || "").slice(0, 2000); // safety limit
-
     const res = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
@@ -54,6 +53,12 @@ Do not output anything except YES or NO.
     return false;
 
   } catch (error) {
+
+    if (error?.status === 429) {
+      console.warn("Rate limited. Falling back to pattern detection.");
+      return /otp|transfer|urgent|blocked|suspend|verify|reward|upi|click|account/i.test(safeMessage);
+    }
+
     console.error("Scam detection error:", error);
 
     // Fail-safe: do not falsely mark as scam on API failure
