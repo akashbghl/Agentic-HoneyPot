@@ -8,6 +8,38 @@ import { extractIntel } from "../services/intelligenceExtractor.js";
 import { getSession, addMessage } from "../services/sessionStore.js";
 import { sendFinalResult } from "../services/guviCallback.js";
 
+
+function detectScamType(text, intel) {
+  const lower = text.toLowerCase();
+
+  if (intel.phishing_urls.length > 0 || lower.includes("click")) {
+    return "phishing";
+  }
+
+  if (intel.upi_ids.length > 0 || lower.includes("upi")) {
+    return "upi_fraud";
+  }
+
+  if (intel.bank_accounts.length > 0 || lower.includes("account")) {
+    return "bank_fraud";
+  }
+
+  return "financial_scam";
+}
+
+function calculateConfidence(session, intel) {
+  if (!session.scamDetected) return 0.2;
+
+  let score = 0.5;
+
+  if (intel.upi_ids.length > 0) score += 0.15;
+  if (intel.bank_accounts.length > 0) score += 0.15;
+  if (intel.phone_numbers.length > 0) score += 0.1;
+  if (intel.phishing_urls.length > 0) score += 0.1;
+
+  return Math.min(score, 0.99);
+}
+
 router.post("/message", checkApiKey, async (req, res) => {
   try {
     const { message, conversationHistory = [], sessionId } = req.body;
@@ -81,9 +113,14 @@ router.post("/message", checkApiKey, async (req, res) => {
       session.scamDetected &&
       scammerTurns >= 5;
 
+    const scamType = detectScamType(fullText, intel);
+    const confidenceLevel = calculateConfidence(session, intel);
+
     const finalOutput = {
       status: isReadyToComplete ? "completed" : "in_progress",
       scamDetected: session.scamDetected,
+      scamType,
+      confidenceLevel,
       totalMessagesExchanged: session.messages.length,
       extractedIntelligence: {
         bankAccounts: intel.bank_accounts || [],
