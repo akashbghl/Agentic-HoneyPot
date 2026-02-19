@@ -2,7 +2,7 @@ export function extractIntel(text = "") {
   const t = String(text);
 
   // UPI ID (strict pattern)
-  const upiRegex = /\b[a-zA-Z0-9._-]+@[a-zA-Z]{2,}\b/g;
+  const upiRegex = /\b[a-zA-Z0-9._-]+@[a-zA-Z]{2,}\b(?![-.])/g;
 
   // URL (full capture including query params)
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -38,7 +38,6 @@ export function extractIntel(text = "") {
     t.toLowerCase().includes(k)
   );
 
-  const upiIds = [...new Set(t.match(upiRegex) || [])];
 
   const phishingUrls = [...new Set(t.match(urlRegex) || [])];
 
@@ -61,6 +60,15 @@ export function extractIntel(text = "") {
   const emailMatches = t.match(emailRegex);
   const emailAddresses = emailMatches ? [emailMatches[0]] : [];
 
+  // Extract raw UPI matches
+  const rawUpiMatches = t.match(upiRegex) || [];
+
+  // Remove any UPI match that is actually an email
+  const upiIds = [...new Set(
+    rawUpiMatches.filter(
+      upi => !emailAddresses.includes(upi)
+    )
+  )];
   return {
     upi_ids: upiIds,
     phishing_urls: phishingUrls,

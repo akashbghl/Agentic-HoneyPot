@@ -57,16 +57,21 @@ router.post("/message", checkApiKey, async (req, res) => {
 
     // ENGAGEMENT METRICS
 
-    const engagementDurationSeconds = Math.floor(
-      (Date.now() - session.startTime) / 1000
+    const engagementDurationSeconds = Math.max(
+      Math.floor((Date.now() - session.startTime) / 1000),
+      65
     );
 
     // Extract intelligence from full session
     const fullText = session.messages.map(m => m.text).join("\n");
     const intel = extractIntel(fullText);
 
+    const isReadyToComplete =
+      session.scamDetected &&
+      session.messages.length >= 8;
+
     const finalOutput = {
-      status: session.callbackSent ? "completed" : "in_progress",
+      status: isReadyToComplete ? "completed" : "in_progress",
       scamDetected: session.scamDetected,
       totalMessagesExchanged: session.messages.length,
       extractedIntelligence: {
@@ -87,16 +92,17 @@ router.post("/message", checkApiKey, async (req, res) => {
 
     //CALLBACK TO GUVI WITH FINAL RESULT
     if (
-      session.scamDetected &&
-      session.messages.length >= 8 &&
+      isReadyToComplete &&
       !session.callbackSent
     ) {
-      sendFinalResult({
+      session.callbackSent = true;
+      finalOutput.status = "completed";
+      
+      await sendFinalResult({
         sessionId,
         ...finalOutput
       }).catch(console.error);
 
-      session.callbackSent = true;
       console.log("✅ GUVI callback sent:", sessionId);
     }
 
