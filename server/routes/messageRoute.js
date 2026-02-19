@@ -66,9 +66,20 @@ router.post("/message", checkApiKey, async (req, res) => {
     const fullText = session.messages.map(m => m.text).join("\n");
     const intel = extractIntel(fullText);
 
+    const scammerTurns = session.messages.filter(
+      m => m.sender === "scammer"
+    ).length;
+
+    const hasIntel =
+      intel.bank_accounts.length > 0 ||
+      intel.upi_ids.length > 0 ||
+      intel.phone_numbers.length > 0 ||
+      intel.phishing_urls.length > 0 ||
+      intel.email_addresses.length > 0;
+
     const isReadyToComplete =
       session.scamDetected &&
-      session.messages.length >= 8;
+      scammerTurns >= 5;
 
     const finalOutput = {
       status: isReadyToComplete ? "completed" : "in_progress",
@@ -93,11 +104,12 @@ router.post("/message", checkApiKey, async (req, res) => {
     //CALLBACK TO GUVI WITH FINAL RESULT
     if (
       isReadyToComplete &&
+      hasIntel &&
       !session.callbackSent
     ) {
       session.callbackSent = true;
       finalOutput.status = "completed";
-      
+
       await sendFinalResult({
         sessionId,
         ...finalOutput
